@@ -25,7 +25,7 @@ export const getAllProducts = async (req, res) => {
     const productsWithImages = products.map(product => ({
       ...product,
       image_url: product.image_url && !product.image_url.includes('default-product.jpg') 
-        ? `http://localhost:8000${product.image_url}` 
+        ? `https://inventory-management-frontend-ocod.onrender.com${product.image_url}` 
         : null // Let frontend handle missing images
     }));
 
@@ -50,7 +50,7 @@ export const getProductById = async (req, res) => {
 
     // Only add full URL if image_url exists and is not the default
     product.image_url = product.image_url && !product.image_url.includes('default-product.jpg') 
-      ? `http://localhost:8000${product.image_url}` 
+      ? `https://inventory-management-frontend-ocod.onrender.com${product.image_url}` 
       : null;
     
     res.json(product);
@@ -78,7 +78,7 @@ export const updateProductStock = async (req, res) => {
 
     // Only add full URL if image_url exists and is not the default
     updatedProduct.image_url = updatedProduct.image_url && !updatedProduct.image_url.includes('default-product.jpg') 
-      ? `http://localhost:8000${updatedProduct.image_url}` 
+      ? `https://inventory-management-frontend-ocod.onrender.com${updatedProduct.image_url}` 
       : null;
 
     res.json(updatedProduct);
