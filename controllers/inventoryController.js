@@ -33,7 +33,7 @@ export const addProduct = async (req, res) => {
     `;
 
     // Add full image URL for response
-    product.image_url = `https://inventory-management-backend-qqqj.onrender.com/api${product.image_url}`;
+    product.image_url = `https://inventory-management-backend-qqqj.onrender.com${product.image_url}`;
 
     console.log('✅ Product inserted successfully:', product);
     res.status(201).json(product);
@@ -152,7 +152,7 @@ export const updateProduct = async (req, res) => {
     `;
 
     // Add full image URL for response
-    updatedProduct.image_url = `https://inventory-management-backend-qqqj.onrender.com/api${updatedProduct.image_url}`;
+    updatedProduct.image_url = `https://inventory-management-backend-qqqj.onrender.com${updatedProduct.image_url}`;
 
     console.log('✅ Product updated successfully:', updatedProduct);
     res.json(updatedProduct);
