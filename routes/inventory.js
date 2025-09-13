@@ -1,5 +1,5 @@
 import express from 'express';
-import upload from '../config/multer.js';
+import upload, { uploadToSupabase, deleteFromSupabase } from '../config/multer.js';
 import { addProduct, updateProduct, deleteProduct } from '../controllers/inventoryController.js';
 
 const router = express.Router();

@@ -1,30 +1,36 @@
 import db from '../config/db.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { uploadToSupabase, deleteFromSupabase } from '../config/multer.js';
 
 export const addProduct = async (req, res) => {
   try {
     console.log('=== ADD PRODUCT REQUEST ===');
     console.log('Request body:', req.body);
     console.log('Uploaded file:', req.file);
-    
-    if (req.file) {
-      console.log('File details:');
-      console.log('- Original name:', req.file.originalname);
-      console.log('- Filename:', req.file.filename);
-      console.log('- Path:', req.file.path);
-      console.log('- Size:', req.file.size);
-      console.log('- File exists on disk:', fs.existsSync(req.file.path));
-    }
 
     const { name, description, category, brand, price, stock_quantity, sku } = req.body;
-    const image_url = req.file ? `/uploads/${req.file.filename}` : '/uploads/default-product.jpg';
-    
-    console.log('Saving image_url as:', image_url);
+    let image_url = null;
+
+    // Handle file upload to Supabase if file exists
+    if (req.file) {
+      // In your addProduct controller, before calling uploadToSupabase
+      if (req.file) {
+        console.log('=== FILE DEBUG ===');
+        console.log('File object keys:', Object.keys(req.file));
+        console.log('Buffer exists:', !!req.file.buffer);
+        console.log('Buffer size:', req.file.buffer ? req.file.buffer.length : 'NO BUFFER');
+        console.log('File size from multer:', req.file.size);
+
+        // Check if buffer matches expected size
+        if (req.file.buffer && req.file.buffer.length !== req.file.size) {
+          console.warn('⚠️ Buffer size mismatch!');
+        }
+      }
+
+      console.log('Uploading file to Supabase...');
+      const uploadResult = await uploadToSupabase(req.file, 'products');
+      image_url = uploadResult.publicUrl;
+      console.log('File uploaded successfully:', image_url);
+    }
 
     const [product] = await db`
       INSERT INTO products (name, description, category, brand, price, stock_quantity, sku, image_url, is_active, created_at, updated_at)
@@ -32,23 +38,11 @@ export const addProduct = async (req, res) => {
       RETURNING *
     `;
 
-    // Add full image URL for response
-    product.image_url = `https://inventory-management-backend-qqqj.onrender.com${product.image_url}`;
-
     console.log('✅ Product inserted successfully:', product);
     res.status(201).json(product);
   } catch (error) {
     console.error('❌ Add product error:', error);
-    
-    // Clean up uploaded file if error occurs
-    if (req.file) {
-      console.log('🗑️ Cleaning up uploaded file due to error');
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Error deleting uploaded file:', err);
-        else console.log('✅ Uploaded file deleted successfully');
-      });
-    }
-    
+
     if (error.code === '23505') {
       return res.status(400).json({ error: 'SKU already exists' });
     }
@@ -62,78 +56,40 @@ export const updateProduct = async (req, res) => {
     console.log('Request params:', req.params);
     console.log('Request body:', req.body);
     console.log('Uploaded file:', req.file);
-    
-    if (req.file) {
-      console.log('File details:');
-      console.log('- Original name:', req.file.originalname);
-      console.log('- Filename:', req.file.filename);
-      console.log('- Path:', req.file.path);
-      console.log('- Size:', req.file.size);
-      console.log('- File exists on disk:', fs.existsSync(req.file.path));
-    }
 
     const { id } = req.params;
     const { name, description, category, brand, price, stock_quantity, sku } = req.body;
-    
-    // Get current product to handle image update
-    console.log('Fetching current product with ID:', id);
+
+    // Get current product
     const [currentProduct] = await db`
       SELECT * FROM products WHERE id = ${id}
     `;
-    
+
     if (!currentProduct) {
-      console.log('❌ Product not found with ID:', id);
-      if (req.file) {
-        console.log('🗑️ Cleaning up uploaded file - product not found');
-        fs.unlink(req.file.path, (err) => {
-          if (err) console.error('Error deleting uploaded file:', err);
-        });
-      }
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    console.log('Current product found:', {
-      id: currentProduct.id,
-      name: currentProduct.name,
-      current_image_url: currentProduct.image_url
-    });
-
     let image_url = currentProduct.image_url;
-    
+    let oldFilePath = null;
+
     // If new image is uploaded
     if (req.file) {
-      image_url = `/uploads/${req.file.filename}`;
-      console.log('New image_url will be:', image_url);
-      
-      // Delete old image if it exists and isn't the default
-      if (currentProduct.image_url && !currentProduct.image_url.includes('default-product.jpg')) {
-        const oldImagePath = path.join(__dirname, '../uploads', path.basename(currentProduct.image_url));
-        console.log('Attempting to delete old image at:', oldImagePath);
-        
-        fs.unlink(oldImagePath, (err) => {
-          if (err) {
-            console.error('❌ Error deleting old image:', err);
-          } else {
-            console.log('✅ Old image deleted successfully');
-          }
-        });
-      } else {
-        console.log('ℹ️ No old image to delete (using default or no previous image)');
-      }
-    } else {
-      console.log('ℹ️ No new image uploaded, keeping existing image_url:', image_url);
-    }
+      console.log('Uploading new file to Supabase...');
+      const uploadResult = await uploadToSupabase(req.file, 'products');
 
-    console.log('Updating product with data:', {
-      name,
-      description,
-      category,
-      brand,
-      price,
-      stock_quantity,
-      sku,
-      image_url
-    });
+      // Store old file path for deletion
+      if (currentProduct.image_url) {
+        // Extract file path from URL for deletion
+        const urlParts = currentProduct.image_url.split('/');
+        const bucketIndex = urlParts.findIndex(part => part === 'product-images');
+        if (bucketIndex !== -1 && bucketIndex < urlParts.length - 1) {
+          oldFilePath = urlParts.slice(bucketIndex + 1).join('/');
+        }
+      }
+
+      image_url = uploadResult.publicUrl;
+      console.log('New file uploaded successfully:', image_url);
+    }
 
     const [updatedProduct] = await db`
       UPDATE products 
@@ -151,23 +107,22 @@ export const updateProduct = async (req, res) => {
       RETURNING *
     `;
 
-    // Add full image URL for response
-    updatedProduct.image_url = `https://inventory-management-backend-qqqj.onrender.com${updatedProduct.image_url}`;
+    // Delete old image from Supabase if a new one was uploaded
+    if (oldFilePath && req.file) {
+      try {
+        await deleteFromSupabase(oldFilePath);
+        console.log('✅ Old image deleted successfully');
+      } catch (deleteError) {
+        console.error('❌ Error deleting old image:', deleteError);
+        // Don't fail the update if image deletion fails
+      }
+    }
 
     console.log('✅ Product updated successfully:', updatedProduct);
     res.json(updatedProduct);
   } catch (error) {
     console.error('❌ Update product error:', error);
-    
-    // Clean up uploaded file if error occurs
-    if (req.file) {
-      console.log('🗑️ Cleaning up uploaded file due to error');
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Error deleting uploaded file:', err);
-        else console.log('✅ Uploaded file deleted successfully');
-      });
-    }
-    
+
     if (error.code === '23505') {
       return res.status(400).json({ error: 'SKU already exists' });
     }
@@ -179,8 +134,17 @@ export const deleteProduct = async (req, res) => {
   try {
     console.log('=== DELETE PRODUCT REQUEST ===');
     console.log('Request params:', req.params);
-    
+
     const { id } = req.params;
+
+    // Get current product to extract image path
+    const [currentProduct] = await db`
+      SELECT * FROM products WHERE id = ${id}
+    `;
+
+    if (!currentProduct) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
 
     const [deletedProduct] = await db`
       UPDATE products 
@@ -189,17 +153,23 @@ export const deleteProduct = async (req, res) => {
       RETURNING *
     `;
 
-    if (!deletedProduct) {
-      console.log('❌ Product not found with ID:', id);
-      return res.status(404).json({ error: 'Product not found' });
+    // Optionally delete image from Supabase Storage
+    if (currentProduct.image_url) {
+      try {
+        const urlParts = currentProduct.image_url.split('/');
+        const bucketIndex = urlParts.findIndex(part => part === 'product-images');
+        if (bucketIndex !== -1 && bucketIndex < urlParts.length - 1) {
+          const filePath = urlParts.slice(bucketIndex + 1).join('/');
+          await deleteFromSupabase(filePath);
+          console.log('✅ Product image deleted from Supabase');
+        }
+      } catch (deleteError) {
+        console.error('❌ Error deleting image from Supabase:', deleteError);
+        // Don't fail the product deletion if image deletion fails
+      }
     }
 
-    console.log('✅ Product deactivated successfully:', {
-      id: deletedProduct.id,
-      name: deletedProduct.name,
-      is_active: deletedProduct.is_active
-    });
-
+    console.log('✅ Product deactivated successfully');
     res.json({ message: 'Product deactivated successfully' });
   } catch (error) {
     console.error('❌ Delete product error:', error);

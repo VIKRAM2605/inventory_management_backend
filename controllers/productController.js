@@ -21,12 +21,11 @@ export const getAllProducts = async (req, res) => {
       ORDER BY name ASC
     `;
 
-    // Only add full URL if image_url exists and is not the default
+    // Products now have direct Supabase Storage URLs, just return them as-is
     const productsWithImages = products.map(product => ({
       ...product,
-      image_url: product.image_url && !product.image_url.includes('default-product.jpg') 
-        ? `https://inventory-management-backend-qqqj.onrender.com${product.image_url}` 
-        : null // Let frontend handle missing images
+      // image_url is already the full Supabase Storage URL from the upload process
+      image_url: product.image_url || null // Keep null if no image
     }));
 
     res.json(productsWithImages);
@@ -48,10 +47,9 @@ export const getProductById = async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Only add full URL if image_url exists and is not the default
-    product.image_url = product.image_url && !product.image_url.includes('default-product.jpg') 
-      ? `https://inventory-management-backend-qqqj.onrender.com${product.image_url}` 
-      : null;
+    // image_url is already the full Supabase Storage URL, no need to modify
+    // Just keep it as-is or set to null if empty
+    product.image_url = product.image_url || null;
     
     res.json(product);
   } catch (error) {
@@ -76,10 +74,8 @@ export const updateProductStock = async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Only add full URL if image_url exists and is not the default
-    updatedProduct.image_url = updatedProduct.image_url && !updatedProduct.image_url.includes('default-product.jpg') 
-      ? `https://inventory-management-backend-qqqj.onrender.com${updatedProduct.image_url}` 
-      : null;
+    // image_url is already the full Supabase Storage URL, no need to modify
+    updatedProduct.image_url = updatedProduct.image_url || null;
 
     res.json(updatedProduct);
   } catch (error) {
