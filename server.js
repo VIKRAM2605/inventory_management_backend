@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/', (req, res) => {
   res.status(200).json({
     status: 'OK',
     message: 'Electrical Shop API Server is running',
